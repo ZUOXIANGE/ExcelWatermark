@@ -1,5 +1,6 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using System.Runtime.Versioning;
 
 namespace ExcelWatermark;
 
@@ -24,6 +25,7 @@ public static class BackgroundWatermark
     /// <param name="xStep">水平方向步进（间距）</param>
     /// <param name="yStep">垂直方向步进（间距）</param>
     /// <param name="colorHex">文字颜色，十六进制，如 #FF0000</param>
+    [SupportedOSPlatform("windows")]
     public static byte[] GenerateTiledWatermarkImage(
         string text,
         int width = 1600,
@@ -134,6 +136,7 @@ public static class BackgroundWatermark
     /// <summary>
     /// 生成文字水印图片并设置为指定工作表的背景。
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public static void SetBackgroundImageWithText(
         string filePath,
         string sheetName,
@@ -152,6 +155,7 @@ public static class BackgroundWatermark
         SetBackgroundImage(filePath, sheetName, bytes);
     }
 
+    [SupportedOSPlatform("windows")]
     public static void SetBackgroundImageWithText(
         Stream workbookStream,
         string sheetName,

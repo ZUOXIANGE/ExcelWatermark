@@ -1,7 +1,9 @@
+using System.Runtime.Versioning;
 namespace ExcelWatermark.Sample;
 
 class Program
 {
+    [SupportedOSPlatform("windows")]
     static void Main(string[] args)
     {
         var file = Path.Combine(AppContext.BaseDirectory, "sample_" + Guid.NewGuid() + ".xlsx");

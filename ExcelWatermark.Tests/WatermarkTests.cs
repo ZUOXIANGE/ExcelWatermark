@@ -1,6 +1,7 @@
 using Xunit;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using System.Runtime.Versioning;
 
 namespace ExcelWatermark.Tests;
 
@@ -107,6 +108,7 @@ public class WatermarkTests
     }
 
     [Fact]
+    [SupportedOSPlatform("windows")]
     public void Stream_Background_Watermark_Adds_Picture()
     {
         var temp = Path.Combine(Path.GetTempPath(), "stream_wm_" + Guid.NewGuid() + ".xlsx");

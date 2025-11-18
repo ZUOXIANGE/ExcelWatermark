@@ -1,5 +1,6 @@
 using Xunit;
 using DocumentFormat.OpenXml.Packaging;
+using System.Runtime.Versioning;
 
 namespace ExcelWatermark.Tests;
 
@@ -8,6 +9,7 @@ public class BackgroundWatermarkTests
     // 用例说明：
     // 验证生成的水印图片字节为 PNG 格式，且内容非空（最小尺寸限制）。
     [Fact]
+    [SupportedOSPlatform("windows")]
     public void Generate_Image_Returns_Png_Bytes()
     {
         // 生成指定参数的斜向文字水印图片字节
@@ -22,6 +24,7 @@ public class BackgroundWatermarkTests
     // 用例说明：
     // 基于文件路径调用设置文字背景水印后，工作表中应存在 Picture 引用元素。
     [Fact]
+    [SupportedOSPlatform("windows")]
     public void Set_Background_Image_With_Text_FilePath()
     {
         var temp = Path.Combine(Path.GetTempPath(), "bgwm_fp_" + Guid.NewGuid() + ".xlsx");
@@ -49,6 +52,7 @@ public class BackgroundWatermarkTests
     // 用例说明：
     // 基于图片文件路径调用设置背景水印后，工作表中应存在 Picture 引用元素。
     [Fact]
+    [SupportedOSPlatform("windows")]
     public void Set_Background_Image_From_File_FilePath()
     {
         var tempWb = Path.Combine(Path.GetTempPath(), "bgwm_file_" + Guid.NewGuid() + ".xlsx");
