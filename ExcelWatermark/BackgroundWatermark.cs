@@ -49,7 +49,9 @@ public static class BackgroundWatermark
         System.Drawing.Color baseColor = ParseHexColor(colorHex);
         var alpha = (int)Math.Round(Math.Clamp(opacity, 0f, 1f) * 255);
         using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B));
-        // 将坐标系移至中心并旋转，便于斜向平铺
+        var measured = g.MeasureString(text, font);
+        var stepX = Math.Max(xStep, (int)Math.Ceiling(measured.Width) + 4);
+        var stepY = Math.Max(yStep, (int)Math.Ceiling(measured.Height) + 4);
         g.TranslateTransform(width / 2f, height / 2f);
         g.RotateTransform(angleDegrees);
         var startX = -width;
@@ -57,9 +59,9 @@ public static class BackgroundWatermark
         var startY = -height;
         var endY = height;
         // 双重循环，按步进绘制平铺文字
-        for (int x = startX; x <= endX; x += xStep)
+        for (int x = startX; x <= endX; x += stepX)
         {
-            for (int y = startY; y <= endY; y += yStep)
+            for (int y = startY; y <= endY; y += stepY)
             {
                 g.DrawString(text, font, brush, x, y);
             }
