@@ -1,0 +1,13 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="ExcelWatermark.Sample/ExcelWatermark.Sample.csproj" />
+  <Project Path="ExcelWatermark.Tests/ExcelWatermark.Tests.csproj" />
+  <Project Path="ExcelWatermark/ExcelWatermark.csproj" />
+</Solution>
