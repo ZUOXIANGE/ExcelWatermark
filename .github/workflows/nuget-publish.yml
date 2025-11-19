@@ -65,6 +65,18 @@ jobs:
             ExcelWatermark/bin/Release/**/*.nupkg
             ExcelWatermark/bin/Release/**/*.snupkg
 
+      - name: Verify NuGet secret and package outputs
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if (-not $env:NUGET_API_KEY) { Write-Error "NUGET_API_KEY secret missing"; exit 1 }
+          $pkgs = Get-ChildItem -Path "./ExcelWatermark/bin/Release" -Filter "*.nupkg" -Recurse
+          if (-not $pkgs) { Write-Error "No .nupkg found to publish"; exit 1 }
+          $pkgs | ForEach-Object { Write-Output "Found package: $($_.FullName)" }
+          Write-Output "Version: $env:PKG_VERSION"
+
       - name: Publish to NuGet
         if: startsWith(github.ref, 'refs/tags/v')
         env:

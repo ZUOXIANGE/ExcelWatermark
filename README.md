@@ -1,5 +1,11 @@
 # ExcelWatermark
 
+[![CI](https://github.com/ZUOXIANGE/ExcelWatermark/actions/workflows/nuget-publish.yml/badge.svg)](https://github.com/ZUOXIANGE/ExcelWatermark/actions/workflows/nuget-publish.yml)
+[![NuGet](https://img.shields.io/nuget/v/ExcelWatermark.svg)](https://www.nuget.org/packages/ExcelWatermark)
+[![Downloads](https://img.shields.io/nuget/dt/ExcelWatermark.svg)](https://www.nuget.org/packages/ExcelWatermark)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
+
 一个基于 .NET 10 与 OpenXML 的 Excel 水印工具库，包含两类能力：
 - 背景水印：生成斜向平铺的半透明文字 PNG，并追加到指定工作表作为背景图片引用
 - 盲水印：将加密文本编码到工作簿样式（字体名位与颜色 LSB），隐藏在工作表中并可安全提取
@@ -12,15 +18,21 @@
 - 盲水印
   - 嵌入：`BlindWatermark.EmbedBlindWatermark`（`ExcelWatermark/BlindWatermark.cs:127`）将 AES‑GCM 加密负载编码到隐藏表样式
   - 提取：`BlindWatermark.ExtractBlindWatermark`（`ExcelWatermark/BlindWatermark.cs:180`）读取样式还原比特流并解密
-- 工作簿生成
-  - 创建空工作簿：`WorkbookFactory.CreateBlankWorkbook`（`ExcelWatermark/WorkbookFactory.cs:9`）
-  - 创建示例订单工作簿：`WorkbookFactory.CreateSampleOrdersWorkbook`（`ExcelWatermark/WorkbookFactory.cs:24`）
+- 示例辅助（不随 NuGet 发布）
+  - 创建空工作簿：`WorkbookFactory.CreateBlankWorkbook`（`ExcelWatermark.Sample/WorkbookFactory.cs:9`）
+  - 创建示例订单工作簿：`WorkbookFactory.CreateSampleOrdersWorkbook`（`ExcelWatermark.Sample/WorkbookFactory.cs:24`）
 
 ## 目录结构
-- `ExcelWatermark`：主库（类库），包含 `BackgroundWatermark`、`BlindWatermark`、`WorkbookFactory`
-- `ExcelWatermark.Sample`：示例项目，演示两种水印的用法
-- `ExcelWatermark.Tests`：xUnit 测试用例，覆盖回归与异常场景
+- `ExcelWatermark`：主库（类库），包含 `BackgroundWatermark`、`BlindWatermark`
+- `ExcelWatermark.Sample`：示例项目，演示两种水印的用法，包含 `WorkbookFactory`
+- `ExcelWatermark.Tests`：xUnit 测试用例，覆盖回归与异常场景，包含测试用 `WorkbookFactory`
 - `ExcelWatermark.slnx`：解决方案文件
+
+## 安装
+```bash
+dotnet add package ExcelWatermark
+```
+或在 `csproj` 中添加对包的引用。发布后可直接通过 NuGet 安装。
 
 ## 环境与依赖
 - .NET SDK `10.0.100` 及以上
@@ -94,3 +106,5 @@ dotnet test
 
 ## 许可
 本项目示例性质，适用于学习与实验用途。若用于生产环境，请结合你的业务安全需求进行更严格的密钥管理与抗篡改设计。
+
+仓库地址：https://github.com/ZUOXIANGE/ExcelWatermark
