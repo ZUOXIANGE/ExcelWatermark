@@ -6,6 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
 
+[中文](README.md) | [English](README.en.md)
+
 一个基于 .NET 10 与 OpenXML 的 Excel 水印工具库，包含两类能力：
 - 背景水印：生成斜向平铺的半透明文字 PNG，并追加到指定工作表作为背景图片引用
 - 盲水印：将加密文本编码到工作簿样式（字体名位与颜色 LSB），隐藏在工作表中并可安全提取
