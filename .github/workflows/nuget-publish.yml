@@ -1,0 +1,79 @@
+name: Build, Test and Publish NuGet
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore (Library)
+        run: dotnet restore ./ExcelWatermark/ExcelWatermark.csproj
+
+      - name: Restore (Tests)
+        run: dotnet restore ./ExcelWatermark.Tests/ExcelWatermark.Tests.csproj
+
+      - name: Build (Library)
+        run: dotnet build ./ExcelWatermark/ExcelWatermark.csproj -c Release --no-restore
+
+      - name: Build (Tests)
+        run: dotnet build ./ExcelWatermark.Tests/ExcelWatermark.Tests.csproj -c Release --no-restore
+
+      - name: Test
+        run: dotnet test ./ExcelWatermark.Tests/ExcelWatermark.Tests.csproj -c Release --no-build --verbosity normal
+
+      - name: Compute package version from tag
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          if (-not "${{ github.ref }}".StartsWith('refs/tags/')) { $ver = '' }
+          echo "PKG_VERSION=$ver" >> $env:GITHUB_ENV
+
+      - name: Pack
+        shell: pwsh
+        run: |
+          if ($env:PKG_VERSION) {
+            dotnet pack ./ExcelWatermark/ExcelWatermark.csproj -c Release --no-build /p:Version=$env:PKG_VERSION /p:RepositoryUrl=https://github.com/${{ github.repository }}
+          } else {
+            dotnet pack ./ExcelWatermark/ExcelWatermark.csproj -c Release --no-build /p:RepositoryUrl=https://github.com/${{ github.repository }}
+          }
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ExcelWatermark ${{ env.PKG_VERSION }}
+          generate_release_notes: true
+          files: |
+            ExcelWatermark/bin/Release/**/*.nupkg
+            ExcelWatermark/bin/Release/**/*.snupkg
+
+      - name: Publish to NuGet
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "./ExcelWatermark/bin/Release" -Filter "*.nupkg" -Recurse | ForEach-Object {
+            dotnet nuget push $_.FullName --api-key "$env:NUGET_API_KEY" --source "https://api.nuget.org/v3/index.json" --skip-duplicate
+          }
+          Get-ChildItem -Path "./ExcelWatermark/bin/Release" -Filter "*.snupkg" -Recurse | ForEach-Object {
+            dotnet nuget push $_.FullName --api-key "$env:NUGET_API_KEY" --source "https://api.nuget.org/v3/index.json" --skip-duplicate
+          }

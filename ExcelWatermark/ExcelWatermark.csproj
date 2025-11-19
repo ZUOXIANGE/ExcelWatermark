@@ -4,9 +4,26 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>ExcelWatermark</PackageId>
+    <Title>ExcelWatermark</Title>
+    <Authors>ZUOXIANGE</Authors>
+    <Company>ZUOXIANGE</Company>
+    <Description>Excel watermark library based on OpenXML: background tiled text PNG and blind watermark embedding/extraction.</Description>
+    <PackageTags>excel;openxml;watermark;background;blind-watermark</PackageTags>
+    <RepositoryUrl>https://github.com/ZUOXIANGE/ExcelWatermark</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageProjectUrl>https://github.com/ZUOXIANGE/ExcelWatermark</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>
