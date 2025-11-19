@@ -31,6 +31,37 @@ public class BackgroundWatermarkTests
         });
     }
 
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Generate_Centered_Image_Returns_Png_Bytes()
+    {
+        var bytes = WatermarkImageGenerator.GenerateCenteredWatermarkImage("CENTER WM", 600, 400, -20f, 0.2f, "Microsoft YaHei", 48f, "#0066CC");
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 100);
+        Assert.Equal(new byte[]{0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A}, bytes.Take(8).ToArray());
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Generate_Tiled_With_Shadow_Returns_Png_Bytes()
+    {
+        var bytes = WatermarkImageGenerator.GenerateTiledWatermarkImageWithShadow("WM-SHADOW", 500, 360, -35f, 0.18f, "Microsoft YaHei", 28f, 180, 140, "#222222", "#000000", 2, 2);
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 100);
+        Assert.Equal(new byte[]{0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A}, bytes.Take(8).ToArray());
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void Generate_Overlay_Image_Returns_Png_Bytes()
+    {
+        var overlay = WatermarkImageGenerator.GenerateCenteredWatermarkImage("IMG", 300, 200, 0f, 0.6f, "Microsoft YaHei", 64f, "#FF0000");
+        var bytes = WatermarkImageGenerator.GenerateOverlayWatermarkImage(overlay, 800, 600, -15f, 0.3f, 0.8f, 10, -5);
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 100);
+        Assert.Equal(new byte[]{0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A}, bytes.Take(8).ToArray());
+    }
+
     // 用例说明：
     // 基于文件路径调用设置文字背景水印后，工作表中应存在 Picture 引用元素。
     [Fact]

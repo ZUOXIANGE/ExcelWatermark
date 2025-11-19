@@ -67,6 +67,129 @@ public static class WatermarkImageGenerator
         return ms.ToArray();
     }
 
+    [SupportedOSPlatform("windows")]
+    public static byte[] GenerateCenteredWatermarkImage(
+        string text,
+        int width = 1600,
+        int height = 1200,
+        float angleDegrees = 0f,
+        float opacity = 0.15f,
+        string fontFamily = "Microsoft YaHei",
+        float fontSize = 72f,
+        string colorHex = "#000000")
+    {
+        using var bmp = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = System.Drawing.Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        g.Clear(System.Drawing.Color.Transparent);
+        using var font = new System.Drawing.Font(fontFamily, fontSize, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
+        var baseColor = ParseHexColor(colorHex);
+        var alpha = (int)Math.Round(Math.Clamp(opacity, 0f, 1f) * 255);
+        using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B));
+        var format = new System.Drawing.StringFormat
+        {
+            Alignment = System.Drawing.StringAlignment.Center,
+            LineAlignment = System.Drawing.StringAlignment.Center
+        };
+        g.TranslateTransform(width / 2f, height / 2f);
+        g.RotateTransform(angleDegrees);
+        g.DrawString(text, font, brush, new System.Drawing.RectangleF(-width / 2f, -height / 2f, width, height), format);
+        g.ResetTransform();
+        using var ms = new System.IO.MemoryStream();
+        bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+        return ms.ToArray();
+    }
+
+    [SupportedOSPlatform("windows")]
+    public static byte[] GenerateTiledWatermarkImageWithShadow(
+        string text,
+        int width = 1600,
+        int height = 1200,
+        float angleDegrees = -30f,
+        float opacity = 0.18f,
+        string fontFamily = "Microsoft YaHei",
+        float fontSize = 36f,
+        int xStep = 300,
+        int yStep = 200,
+        string colorHex = "#000000",
+        string shadowColorHex = "#000000",
+        int shadowOffsetX = 2,
+        int shadowOffsetY = 2)
+    {
+        using var bmp = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = System.Drawing.Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+        g.Clear(System.Drawing.Color.Transparent);
+        using var font = new System.Drawing.Font(fontFamily, fontSize, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
+        var mainColor = ParseHexColor(colorHex);
+        var shadowColor = ParseHexColor(shadowColorHex);
+        var alpha = (int)Math.Round(Math.Clamp(opacity, 0f, 1f) * 255);
+        using var mainBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(alpha, mainColor.R, mainColor.G, mainColor.B));
+        using var shadowBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(Math.Min(255, (int)(alpha * 1.2)), shadowColor.R, shadowColor.G, shadowColor.B));
+        var measured = g.MeasureString(text, font);
+        var stepX = Math.Max(xStep, (int)Math.Ceiling(measured.Width) + 6);
+        var stepY = Math.Max(yStep, (int)Math.Ceiling(measured.Height) + 6);
+        g.TranslateTransform(width / 2f, height / 2f);
+        g.RotateTransform(angleDegrees);
+        var startX = -width;
+        var endX = width;
+        var startY = -height;
+        var endY = height;
+        for (int x = startX; x <= endX; x += stepX)
+        {
+            for (int y = startY; y <= endY; y += stepY)
+            {
+                g.DrawString(text, font, shadowBrush, x + shadowOffsetX, y + shadowOffsetY);
+                g.DrawString(text, font, mainBrush, x, y);
+            }
+        }
+        g.ResetTransform();
+        using var ms = new System.IO.MemoryStream();
+        bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+        return ms.ToArray();
+    }
+
+    [SupportedOSPlatform("windows")]
+    public static byte[] GenerateOverlayWatermarkImage(
+        byte[] overlayImageBytes,
+        int width = 1600,
+        int height = 1200,
+        float angleDegrees = 0f,
+        float opacity = 0.15f,
+        float scale = 1.0f,
+        int offsetX = 0,
+        int offsetY = 0)
+    {
+        using var bmp = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using var g = System.Drawing.Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(System.Drawing.Color.Transparent);
+        using var msIn = new System.IO.MemoryStream(overlayImageBytes);
+        using var img = System.Drawing.Image.FromStream(msIn);
+        var targetW = Math.Max(1, (int)Math.Round(img.Width * Math.Max(0.01f, scale)));
+        var targetH = Math.Max(1, (int)Math.Round(img.Height * Math.Max(0.01f, scale)));
+        var cm = new System.Drawing.Imaging.ColorMatrix
+        {
+            Matrix00 = 1f,
+            Matrix11 = 1f,
+            Matrix22 = 1f,
+            Matrix33 = Math.Clamp(opacity, 0f, 1f),
+            Matrix44 = 1f
+        };
+        using var attrs = new System.Drawing.Imaging.ImageAttributes();
+        attrs.SetColorMatrix(cm, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
+        g.TranslateTransform(width / 2f, height / 2f);
+        g.RotateTransform(angleDegrees);
+        var dest = new System.Drawing.Rectangle(-targetW / 2 + offsetX, -targetH / 2 + offsetY, targetW, targetH);
+        g.DrawImage(img, dest, 0, 0, img.Width, img.Height, System.Drawing.GraphicsUnit.Pixel, attrs);
+        g.ResetTransform();
+        using var msOut = new System.IO.MemoryStream();
+        bmp.Save(msOut, System.Drawing.Imaging.ImageFormat.Png);
+        return msOut.ToArray();
+    }
+
     /// <summary>
     /// 解析十六进制颜色字符串为 <see cref="System.Drawing.Color"/>。
     /// </summary>
