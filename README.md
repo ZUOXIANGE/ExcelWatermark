@@ -14,9 +14,8 @@
 
 ## 功能
 - 背景水印
-  - 生成平铺文字的 PNG：`BackgroundWatermark.GenerateTiledWatermarkImage`（`ExcelWatermark/BackgroundWatermark.cs:27`）
-  - 追加 PNG 为背景：`BackgroundWatermark.SetBackgroundImage`（支持 `filePath` 与 `Stream`，`ExcelWatermark/BackgroundWatermark.cs:80`、`ExcelWatermark/BackgroundWatermark.cs:101`）
-  - 便捷方法：文字生成并设置背景 `SetBackgroundImageWithText`（`ExcelWatermark/BackgroundWatermark.cs:137`、`ExcelWatermark/BackgroundWatermark.cs:155`）
+  - 生成平铺文字的 PNG：`WatermarkImageGenerator.GenerateTiledWatermarkImage`
+  - 追加 PNG 为背景：`BackgroundWatermark.SetBackgroundImage`（支持 `filePath` 与 `Stream`）
 - 盲水印
   - 嵌入：`BlindWatermark.EmbedBlindWatermark`（`ExcelWatermark/BlindWatermark.cs:127`）将 AES‑GCM 加密负载编码到隐藏表样式
   - 提取：`BlindWatermark.ExtractBlindWatermark`（`ExcelWatermark/BlindWatermark.cs:180`）读取样式还原比特流并解密
@@ -66,23 +65,46 @@ BlindWatermark.EmbedBlindWatermark(file, "示例盲水印", "demo-key");
 var text = BlindWatermark.ExtractBlindWatermark(file, "demo-key");
 Console.WriteLine(text);
 ```
+- 盲水印（流方式）
+```csharp
+var file = Path.Combine(Path.GetTempPath(), "sample_stream_" + Guid.NewGuid() + ".xlsx");
+WorkbookFactory.CreateBlankWorkbook(file);
+using (var fs = new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+{
+    BlindWatermark.EmbedBlindWatermark(fs, "示例盲水印", "demo-key");
+}
+using (var fr = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+{
+    var text = BlindWatermark.ExtractBlindWatermark(fr, "demo-key");
+    Console.WriteLine(text);
+}
+```
 - 背景文字水印（生成 PNG 并设置为背景）
 ```csharp
 var orders = Path.Combine(Path.GetTempPath(), "orders_" + Guid.NewGuid() + ".xlsx");
 WorkbookFactory.CreateSampleOrdersWorkbook(orders, 500);
-BackgroundWatermark.SetBackgroundImageWithText(
-    orders,
-    "Orders",
+var bytes = WatermarkImageGenerator.GenerateTiledWatermarkImage(
     "CONFIDENTIAL 机密",
     1600, 1200, -30f, 0.12f,
     "Microsoft YaHei", 48f,
     280, 180,
     "#FF0000");
+BackgroundWatermark.SetBackgroundImage(orders, "Orders", bytes);
+```
+- 背景文字水印（流方式）
+```csharp
+var orders = Path.Combine(Path.GetTempPath(), "orders_stream_" + Guid.NewGuid() + ".xlsx");
+WorkbookFactory.CreateSampleOrdersWorkbook(orders, 200);
+using (var fs = new FileStream(orders, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+{
+    var bytes = WatermarkImageGenerator.GenerateTiledWatermarkImage("STREAM WM", 800, 600, -45f, 0.2f, "Microsoft YaHei", 32f, 200, 150, "#0000FF");
+    BackgroundWatermark.SetBackgroundImage(fs, "Orders", bytes);
+}
 ```
 - 从 PNG 文件设置背景
 ```csharp
 var png = Path.Combine(Path.GetTempPath(), "bg.png");
-File.WriteAllBytes(png, BackgroundWatermark.GenerateTiledWatermarkImage("FILE-WM", 600, 400));
+File.WriteAllBytes(png, WatermarkImageGenerator.GenerateTiledWatermarkImage("FILE-WM", 600, 400));
 BackgroundWatermark.SetBackgroundImageFromFile(orders, "Orders", png);
 ```
 

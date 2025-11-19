@@ -34,6 +34,31 @@ public class WatermarkTests
         }
     }
 
+    [Fact]
+    public void Stream_Embed_And_Extract_Roundtrip()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wm_rt_stream_" + Guid.NewGuid() + ".xlsx");
+        try
+        {
+            WorkbookFactory.CreateBlankWorkbook(temp);
+            var text = "Stream盲水印ABC123";
+            var key = "stream-secret";
+            using (var fs = new FileStream(temp, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+            {
+                BlindWatermark.EmbedBlindWatermark(fs, text, key);
+            }
+            using (var fr = new FileStream(temp, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                var got = BlindWatermark.ExtractBlindWatermark(fr, key);
+                Assert.Equal(text, got);
+            }
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+    }
+
     // 用例说明：
     // 验证嵌入后会创建名为 "wm$" 的隐藏工作表，作为水印载体。
     [Fact]
@@ -57,6 +82,55 @@ public class WatermarkTests
         finally
         {
             // 清理临时文件
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+    }
+
+    [Fact]
+    public void Extract_Without_Watermark_Sheet_Should_Fail()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wm_no_sheet_" + Guid.NewGuid() + ".xlsx");
+        try
+        {
+            WorkbookFactory.CreateBlankWorkbook(temp);
+            Assert.Throws<InvalidOperationException>(() =>
+            {
+                BlindWatermark.ExtractBlindWatermark(temp, "k");
+            });
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
+    }
+
+    [Fact]
+    public void Extract_With_Empty_Watermark_Sheet_Should_Fail()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "wm_empty_" + Guid.NewGuid() + ".xlsx");
+        try
+        {
+            WorkbookFactory.CreateBlankWorkbook(temp);
+            using (var doc = SpreadsheetDocument.Open(temp, true))
+            {
+                var wb = doc.WorkbookPart!;
+                var wsPart = wb.AddNewPart<WorksheetPart>();
+                wsPart.Worksheet = new Worksheet(new SheetData());
+                wsPart.Worksheet.Save();
+                var sheets = wb.Workbook.Sheets ?? wb.Workbook.AppendChild(new Sheets());
+                var sheetId = (uint)(sheets.Elements<Sheet>().Select(s => s.SheetId!.Value).DefaultIfEmpty(0u).Max() + 1);
+                var relId = wb.GetIdOfPart(wsPart);
+                var sheet = new Sheet { Name = "wm$", SheetId = sheetId, Id = relId, State = SheetStateValues.Hidden };
+                sheets.Append(sheet);
+                wb.Workbook.Save();
+            }
+            Assert.Throws<InvalidOperationException>(() =>
+            {
+                BlindWatermark.ExtractBlindWatermark(temp, "k");
+            });
+        }
+        finally
+        {
             if (File.Exists(temp)) File.Delete(temp);
         }
     }
@@ -117,7 +191,8 @@ public class WatermarkTests
             WorkbookFactory.CreateSampleOrdersWorkbook(temp, 10);
             using (var fs = new FileStream(temp, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
             {
-                BackgroundWatermark.SetBackgroundImageWithText(fs, "Orders", "STREAM WM", 800, 600, -45f, 0.2f, "Microsoft YaHei", 32f, 200, 150, "#0000FF");
+                var bytes = WatermarkImageGenerator.GenerateTiledWatermarkImage("STREAM WM", 800, 600, -45f, 0.2f, "Microsoft YaHei", 32f, 200, 150, "#0000FF");
+                BackgroundWatermark.SetBackgroundImage(fs, "Orders", bytes);
             }
             using var doc = SpreadsheetDocument.Open(temp, false);
             var wb = doc.WorkbookPart!;

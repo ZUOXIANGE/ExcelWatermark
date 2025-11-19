@@ -7,13 +7,163 @@ using DocumentFormat.OpenXml;
 namespace ExcelWatermark;
 
 /// <summary>
-/// 盲水印工具类：
-/// - 使用 AES-GCM 对文本进行加密（确保保密性与完整性）
-/// - 将加密后的比特流嵌入到 Excel 单元格样式中（字体名称与颜色 LSB）
-/// - 从工作簿中提取并解密还原原始文本
+/// 盲水印工具类
 /// </summary>
 public static class BlindWatermark
 {
+    /// <summary>
+    /// 将加密后的盲水印嵌入到 Excel 文件。
+    /// - 创建/获取样式集合，准备四种组合以承载 2 位（字体名位 + 颜色LSB 位）
+    /// - 在隐藏工作表 <c>wm$</c> 按 32 列栅格写入若干空单元格并应用承载样式
+    /// </summary>
+    /// <param name="filePath">Excel 工作簿文件路径（可读写）。</param>
+    /// <param name="text">要嵌入的盲水印文本（UTF-8 编码）。</param>
+    /// <param name="key">加密口令，用于派生 AES-GCM 密钥。</param>
+    public static void EmbedBlindWatermark(string filePath, string text, string key)
+    {
+        using var doc = SpreadsheetDocument.Open(filePath, true);
+        EmbedCore(doc.WorkbookPart!, text, key);
+    }
+
+    /// <summary>
+    /// 将加密后的盲水印嵌入到 Excel 工作簿流。
+    /// 与 <see cref="EmbedBlindWatermark(string, string, string)"/> 等效，但以流作为输入。
+    /// </summary>
+    /// <param name="workbookStream">Excel 工作簿流（可读写，定位到开头）。</param>
+    /// <param name="text">要嵌入的盲水印文本（UTF-8 编码）。</param>
+    /// <param name="key">加密口令，用于派生 AES-GCM 密钥。</param>
+    public static void EmbedBlindWatermark(Stream workbookStream, string text, string key)
+    {
+        using var doc = SpreadsheetDocument.Open(workbookStream, true);
+        EmbedCore(doc.WorkbookPart!, text, key);
+    }
+
+    /// <summary>
+    /// 从隐藏工作表 <c>wm$</c> 读取单元格样式，解码每格承载的两位并还原比特流，解析帧头后解密得到原文。
+    /// 错误口令或数据不完整将导致解密失败或异常。
+    /// </summary>
+    /// <param name="filePath">Excel 工作簿文件路径（只读）。</param>
+    /// <param name="key">加密口令，用于派生 AES-GCM 密钥。</param>
+    /// <returns>提取得到的原始文本。</returns>
+    /// <exception cref="InvalidOperationException">未找到水印工作表或水印数据不完整。</exception>
+    /// <exception cref="System.Security.Cryptography.AuthenticationTagMismatchException">口令错误导致 GCM 标签校验失败。</exception>
+    public static string ExtractBlindWatermark(string filePath, string key)
+    {
+        using var doc = SpreadsheetDocument.Open(filePath, false);
+        return ExtractCore(doc.WorkbookPart!, key);
+    }
+
+    /// <summary>
+    /// 从 Excel 工作簿流提取盲水印文本。
+    /// 与 <see cref="ExtractBlindWatermark(string, string)"/> 等效，但以流作为输入。
+    /// </summary>
+    /// <param name="workbookStream">Excel 工作簿流（只读，定位到开头）。</param>
+    /// <param name="key">加密口令，用于派生 AES-GCM 密钥。</param>
+    /// <returns>提取得到的原始文本。</returns>
+    /// <exception cref="InvalidOperationException">未找到水印工作表或水印数据不完整。</exception>
+    /// <exception cref="System.Security.Cryptography.AuthenticationTagMismatchException">口令错误导致 GCM 标签校验失败。</exception>
+    public static string ExtractBlindWatermark(Stream workbookStream, string key)
+    {
+        using var doc = SpreadsheetDocument.Open(workbookStream, false);
+        return ExtractCore(doc.WorkbookPart!, key);
+    }
+
+    /// <summary>
+    /// 核心嵌入逻辑：初始化样式与隐藏工作表，按位编码并写入栅格。
+    /// </summary>
+    /// <param name="wbPart">工作簿部件。</param>
+    /// <param name="text">要嵌入的盲水印文本。</param>
+    /// <param name="key">加密口令。</param>
+    private static void EmbedCore(WorkbookPart wbPart, string text, string key)
+    {
+        var styles = wbPart.WorkbookStylesPart ?? wbPart.AddNewPart<WorkbookStylesPart>();
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract  去掉会报错
+        if (styles.Stylesheet == null)
+        {
+            styles.Stylesheet = new Stylesheet(new Fonts(new Font()), new Fills(new Fill()), new Borders(new Border()), new CellFormats(new CellFormat()));
+        }
+        var cfg = EnsureStyleCombos(styles);
+        var payload = Encrypt(text, key);
+        var framed = Frame(payload);
+        var bits = ToBits(framed).ToArray();
+        var cellsNeeded = (bits.Length + 1) / 2;
+        var wsPart = EnsureHiddenSheet(wbPart, "wm$");
+        var sheetData = wsPart.Worksheet.GetFirstChild<SheetData>()!;
+        int cols = 32;
+        int rows = (int)Math.Ceiling(cellsNeeded / (double)cols);
+        int bitIdx = 0;
+        for (int r = 1; r <= rows; r++)
+        {
+            var row = new Row { RowIndex = (uint)r };
+            sheetData.Append(row);
+            for (int c = 0; c < cols; c++)
+            {
+                if (bitIdx >= bits.Length) break;
+                var a = bits[bitIdx++];
+                var b = bitIdx < bits.Length ? bits[bitIdx++] : (byte)0;
+                uint styleIndex = a switch
+                {
+                    0 => b == 0 ? cfg.cf00 : cfg.cf01,
+                    _ => b == 0 ? cfg.cf10 : cfg.cf11
+                };
+                var cell = new Cell
+                {
+                    CellReference = ColumnName(c) + r,
+                    DataType = CellValues.String,
+                    CellValue = new CellValue(string.Empty),
+                    StyleIndex = styleIndex
+                };
+                row.Append(cell);
+            }
+        }
+        wsPart.Worksheet.Save();
+        styles.Stylesheet.Save();
+        wbPart.Workbook.Save();
+    }
+
+    /// <summary>
+    /// 核心提取逻辑：读取隐藏工作表样式还原位流，并解密得到原文。
+    /// </summary>
+    /// <param name="wbPart">工作簿部件。</param>
+    /// <param name="key">加密口令。</param>
+    /// <returns>提取得到的原始文本。</returns>
+    /// <exception cref="InvalidOperationException">未找到水印工作表或水印数据不完整。</exception>
+    private static string ExtractCore(WorkbookPart wbPart, string key)
+    {
+        var styles = wbPart.WorkbookStylesPart!;
+        var wsPart = GetSheetByName(wbPart, "wm$");
+        if (wsPart == null) throw new InvalidOperationException("Watermark sheet not found");
+        var sheetData = wsPart.Worksheet.GetFirstChild<SheetData>()!;
+        var bits = new List<byte>();
+        foreach (var row in sheetData.Elements<Row>())
+        {
+            foreach (var cell in row.Elements<Cell>())
+            {
+                var si = cell.StyleIndex?.Value ?? 0u;
+                var cf = GetCellFormat(styles, si);
+                var f = GetFont(styles, cf.FontId!.Value);
+                var fname = f.Elements<FontName>().FirstOrDefault()?.Val?.Value ?? "";
+                byte a = fname.Equals("Cambria", StringComparison.OrdinalIgnoreCase) ? (byte)1 : (byte)0;
+                var rgb = f.Elements<Color>().FirstOrDefault()?.Rgb?.Value;
+                byte b = 0;
+                if (!string.IsNullOrEmpty(rgb) && rgb.Length == 8)
+                {
+                    var blue = Convert.ToByte(rgb.Substring(6, 2), 16);
+                    b = (byte)(blue & 0x01);
+                }
+                bits.Add(a);
+                bits.Add(b);
+            }
+        }
+        var bytes = FromBits(bits);
+        var hdr = ParseHeader(bytes);
+        var total = hdr.headerBytes + hdr.length;
+        if (bytes.Length < total) throw new InvalidOperationException("Incomplete watermark");
+        var payload = new byte[hdr.length];
+        Buffer.BlockCopy(bytes, hdr.headerBytes, payload, 0, hdr.length);
+        return Decrypt(payload, key);
+    }
+
     /// <summary>
     /// 使用 AES-GCM 加密文本，输出负载为 nonce(12) + tag(16) + ciphertext。
     /// key 由用户口令经 SHA256 派生，nonce 随机生成；tag 用于完整性校验。
@@ -91,7 +241,7 @@ public static class BlindWatermark
     /// </summary>
     private static byte[] Frame(byte[] payload)
     {
-        var magic = Encoding.ASCII.GetBytes("BMWM");
+        var magic = "BMWM"u8.ToArray();
         var ver = new byte[] { 1 };
         var len = BitConverter.GetBytes(payload.Length);
         if (BitConverter.IsLittleEndian == false) Array.Reverse(len);
@@ -120,104 +270,6 @@ public static class BlindWatermark
     }
 
     /// <summary>
-    /// 将加密后的盲水印嵌入到 Excel 文件：
-    /// - 创建/获取样式集合，准备四种组合以承载 2 位（字体名位 + 颜色LSB位）
-    /// - 在隐藏工作表 wm$ 按 32 列栅格写入若干空单元格并应用承载样式
-    /// </summary>
-    public static void EmbedBlindWatermark(string filePath, string text, string key)
-    {
-        using var doc = SpreadsheetDocument.Open(filePath, true);
-        var wbPart = doc.WorkbookPart!;
-        var styles = wbPart.WorkbookStylesPart ?? wbPart.AddNewPart<WorkbookStylesPart>();
-        if (styles.Stylesheet == null)
-        {
-            styles.Stylesheet = new Stylesheet(new Fonts(new Font()), new Fills(new Fill()), new Borders(new Border()), new CellFormats(new CellFormat()));
-        }
-        var cfg = EnsureStyleCombos(styles); // 准备四种样式组合：cf00/cf01/cf10/cf11
-        var payload = Encrypt(text, key);
-        var framed = Frame(payload);
-        var bits = ToBits(framed).ToArray();
-        var cellsNeeded = (bits.Length + 1) / 2; // 每单元格承载 2 位
-        var wsPart = EnsureHiddenSheet(wbPart, "wm$"); // 载体工作表为隐藏表
-        var sheetData = wsPart.Worksheet.GetFirstChild<SheetData>()!;
-        int cols = 32;
-        int rows = (int)Math.Ceiling(cellsNeeded / (double)cols);
-        int bitIdx = 0;
-        for (int r = 1; r <= rows; r++)
-        {
-            var row = new Row { RowIndex = (uint)r };
-            sheetData.Append(row);
-            for (int c = 0; c < cols; c++)
-            {
-                if (bitIdx >= bits.Length) break;
-                var a = bits[bitIdx++];
-                var b = bitIdx < bits.Length ? bits[bitIdx++] : (byte)0;
-                // a 表示字体名位（0=Calibri，1=Cambria），b 表示颜色蓝通道 LSB 位
-                uint styleIndex = a switch
-                {
-                    0 => b == 0 ? cfg.cf00 : cfg.cf01,
-                    _ => b == 0 ? cfg.cf10 : cfg.cf11
-                };
-                var cell = new Cell
-                {
-                    CellReference = ColumnName(c) + r,
-                    DataType = CellValues.String,
-                    CellValue = new CellValue(string.Empty), // 写入空字符串，视觉无差异
-                    StyleIndex = styleIndex
-                };
-                row.Append(cell);
-            }
-        }
-        wsPart.Worksheet.Save();
-        styles.Stylesheet.Save();
-        wbPart.Workbook.Save();
-    }
-
-    /// <summary>
-    /// 从隐藏工作表 wm$ 读取单元格样式，解码每格承载的两位并还原比特流，
-    /// 解析帧头后解密得到原文。错误密钥将导致解密异常。
-    /// </summary>
-    public static string ExtractBlindWatermark(string filePath, string key)
-    {
-        using var doc = SpreadsheetDocument.Open(filePath, false);
-        var wbPart = doc.WorkbookPart!;
-        var styles = wbPart.WorkbookStylesPart!;
-        var wsPart = GetSheetByName(wbPart, "wm$");
-        if (wsPart == null) throw new InvalidOperationException("Watermark sheet not found");
-        var sheetData = wsPart.Worksheet.GetFirstChild<SheetData>()!;
-        var bits = new List<byte>();
-        foreach (var row in sheetData.Elements<Row>())
-        {
-            foreach (var cell in row.Elements<Cell>())
-            {
-                var si = cell.StyleIndex?.Value ?? 0u; // 通过样式索引获取字体与颜色
-                var cf = GetCellFormat(styles, si);
-                var f = GetFont(styles, cf.FontId!.Value);
-                var fname = f.Elements<FontName>().FirstOrDefault()?.Val?.Value ?? "";
-                byte a = fname.Equals("Cambria", StringComparison.OrdinalIgnoreCase) ? (byte)1 : (byte)0;
-                var rgb = f.Elements<Color>().FirstOrDefault()?.Rgb?.Value;
-                byte b = 0;
-                if (!string.IsNullOrEmpty(rgb) && rgb.Length == 8)
-                {
-                    var blue = Convert.ToByte(rgb.Substring(6, 2), 16); // ARGB 最后两位为蓝色通道
-                    b = (byte)(blue & 0x01);
-                }
-                bits.Add(a);
-                bits.Add(b);
-            }
-        }
-        var bytes = FromBits(bits);
-        var hdr = ParseHeader(bytes);
-        var total = hdr.headerBytes + hdr.length;
-        if (bytes.Length < total) throw new InvalidOperationException("Incomplete watermark");
-        var payload = new byte[hdr.length];
-        Buffer.BlockCopy(bytes, hdr.headerBytes, payload, 0, hdr.length);
-        return Decrypt(payload, key);
-    }
-
-    
-
-    /// <summary>
     /// 获取指定名称的工作表；若不存在则创建一个隐藏工作表作为水印载体。
     /// </summary>
     private static WorksheetPart EnsureHiddenSheet(WorkbookPart wbPart, string name)
@@ -228,7 +280,7 @@ public static class BlindWatermark
         wsPart.Worksheet = new Worksheet(new SheetData());
         wsPart.Worksheet.Save();
         var sheets = wbPart.Workbook.Sheets ?? wbPart.Workbook.AppendChild(new Sheets());
-        var sheetId = (uint)(sheets.Elements<Sheet>().Select(s => s.SheetId!.Value).DefaultIfEmpty(0u).Max() + 1);
+        var sheetId = sheets.Elements<Sheet>().Select(s => s.SheetId!.Value).DefaultIfEmpty(0u).Max() + 1;
         var relId = wbPart.GetIdOfPart(wsPart);
         var sheet = new Sheet { Name = name, SheetId = sheetId, Id = relId, State = SheetStateValues.Hidden };
         sheets.Append(sheet);
@@ -272,7 +324,7 @@ public static class BlindWatermark
     /// </summary>
     private static (uint cf00, uint cf01, uint cf10, uint cf11) EnsureStyleCombos(WorkbookStylesPart styles)
     {
-        var ss = styles.Stylesheet!;
+        var ss = styles.Stylesheet;
         var fonts = ss.Fonts ?? ss.AppendChild(new Fonts());
         var cellFormats = ss.CellFormats ?? ss.AppendChild(new CellFormats());
         if (!fonts.Elements<Font>().Any()) fonts.Append(new Font());

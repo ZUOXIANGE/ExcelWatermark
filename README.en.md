@@ -8,9 +8,8 @@ An Excel watermark library based on .NET 10 and OpenXML, providing two capabilit
 
 ## Features
 - Background watermark
-  - Generate tiled text PNG: `BackgroundWatermark.GenerateTiledWatermarkImage` (`ExcelWatermark/BackgroundWatermark.cs:27`)
-  - Set PNG as background: `BackgroundWatermark.SetBackgroundImage` (supports `filePath` and `Stream`, `ExcelWatermark/BackgroundWatermark.cs:80`, `ExcelWatermark/BackgroundWatermark.cs:101`)
-  - Convenience: generate text and set background `SetBackgroundImageWithText` (`ExcelWatermark/BackgroundWatermark.cs:137`, `ExcelWatermark/BackgroundWatermark.cs:155`)
+  - Generate tiled text PNG: `WatermarkImageGenerator.GenerateTiledWatermarkImage`
+  - Set PNG as background: `BackgroundWatermark.SetBackgroundImage` (supports `filePath` and `Stream`)
 - Blind watermark
   - Embed: `BlindWatermark.EmbedBlindWatermark` (`ExcelWatermark/BlindWatermark.cs:127`) encodes AES‑GCM encrypted payload into hidden sheet styles
   - Extract: `BlindWatermark.ExtractBlindWatermark` (`ExcelWatermark/BlindWatermark.cs:180`) reads styles, reconstructs the bitstream and decrypts
@@ -60,23 +59,46 @@ BlindWatermark.EmbedBlindWatermark(file, "Sample blind watermark", "demo-key");
 var text = BlindWatermark.ExtractBlindWatermark(file, "demo-key");
 Console.WriteLine(text);
 ```
+- Blind watermark (Stream)
+```csharp
+var file = Path.Combine(Path.GetTempPath(), "sample_stream_" + Guid.NewGuid() + ".xlsx");
+WorkbookFactory.CreateBlankWorkbook(file);
+using (var fs = new FileStream(file, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+{
+    BlindWatermark.EmbedBlindWatermark(fs, "Sample blind watermark", "demo-key");
+}
+using (var fr = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+{
+    var text = BlindWatermark.ExtractBlindWatermark(fr, "demo-key");
+    Console.WriteLine(text);
+}
+```
 - Background text watermark (generate PNG and set as background)
 ```csharp
 var orders = Path.Combine(Path.GetTempPath(), "orders_" + Guid.NewGuid() + ".xlsx");
 WorkbookFactory.CreateSampleOrdersWorkbook(orders, 500);
-BackgroundWatermark.SetBackgroundImageWithText(
-    orders,
-    "Orders",
+var bytes = WatermarkImageGenerator.GenerateTiledWatermarkImage(
     "CONFIDENTIAL",
     1600, 1200, -30f, 0.12f,
     "Microsoft YaHei", 48f,
     280, 180,
     "#FF0000");
+BackgroundWatermark.SetBackgroundImage(orders, "Orders", bytes);
+```
+- Background text watermark (Stream)
+```csharp
+var orders = Path.Combine(Path.GetTempPath(), "orders_stream_" + Guid.NewGuid() + ".xlsx");
+WorkbookFactory.CreateSampleOrdersWorkbook(orders, 200);
+using (var fs = new FileStream(orders, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+{
+    var bytes = WatermarkImageGenerator.GenerateTiledWatermarkImage("STREAM WM", 800, 600, -45f, 0.2f, "Microsoft YaHei", 32f, 200, 150, "#0000FF");
+    BackgroundWatermark.SetBackgroundImage(fs, "Orders", bytes);
+}
 ```
 - Set background from a PNG file
 ```csharp
 var png = Path.Combine(Path.GetTempPath(), "bg.png");
-File.WriteAllBytes(png, BackgroundWatermark.GenerateTiledWatermarkImage("FILE-WM", 600, 400));
+File.WriteAllBytes(png, WatermarkImageGenerator.GenerateTiledWatermarkImage("FILE-WM", 600, 400));
 BackgroundWatermark.SetBackgroundImageFromFile(orders, "Orders", png);
 ```
 
